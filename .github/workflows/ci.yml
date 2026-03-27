@@ -1,0 +1,39 @@
+name: CI Python (FastAPI)
+
+# Déclenche l'action à chaque push ou pull request sur la branche main/master
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Récupérer le code de ton dépôt
+    - name: Checkout du code
+      uses: actions/checkout@v4
+
+    # 2. Installer Python
+    - name: Configuration de Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13" # Tu peux changer selon ta version locale
+
+    # 3. Installer les dépendances
+    - name: Installation des dépendances
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    # 4. Vérifier le code avec le linter
+    - name: Lint avec Ruff
+      run: |
+        ruff check .
+
+    # 5. Lancer les tests et afficher la couverture
+    - name: Tests avec Pytest
+      run: |
+        pytest --cov=. --cov-report=term-missing
