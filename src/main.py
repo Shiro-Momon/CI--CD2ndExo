@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Any
-from src.utils import capitalize, calculateAverage, slugify, clamp
+#from typing import List, Any
+from src.utils import capitalize, slugify
 from src.validators import isValidEmail, isValidPassword, isValidAge
 
 app = FastAPI(title="Mon API de Validation et Utilitaires")
