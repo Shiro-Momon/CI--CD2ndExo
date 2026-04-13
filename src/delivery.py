@@ -83,3 +83,50 @@ def calculateSurge(hour: float, dayOfWeek: int) -> float:
 
     # Hors créneau défini (ex: 11h30-12h, 13h30-14h, 18h-19h) → fermé
     return 0
+
+
+def calculateOrderTotal(
+    items: list,
+    distance: float,
+    weight: float,
+    promoCode: str | None,
+    hour: float,
+    dayOfWeek: int,
+    promoCodes: list,
+) -> dict:
+    if not items:
+        raise ValueError("Le panier ne peut pas être vide")
+
+    for item in items:
+        if item["price"] < 0:
+            raise ValueError(f"Le prix de '{item['name']}' ne peut pas être négatif")
+
+    # 1. Sous-total
+    subtotal = round(sum(item["price"] * item["quantity"] for item in items), 2)
+
+    # 2. Code promo → discount
+    discounted = applyPromoCode(subtotal, promoCode, promoCodes)
+    discount = round(subtotal - discounted, 2)
+
+    # 3. Frais de livraison
+    fee = calculateDeliveryFee(distance, weight)
+    if fee is None:
+        raise ValueError(f"La distance de {distance} km dépasse la zone de livraison (max 10 km)")
+
+    # 4. Surge
+    surge = calculateSurge(hour, dayOfWeek)
+    if surge == 0:
+        raise ValueError("La livraison n'est pas disponible en dehors des heures d'ouverture")
+
+    delivery_fee = round(fee * surge, 2)
+
+    # 5. Total
+    total = round(discounted + delivery_fee, 2)
+
+    return {
+        "subtotal": subtotal,
+        "discount": discount,
+        "deliveryFee": delivery_fee,
+        "surge": surge,
+        "total": total,
+    }

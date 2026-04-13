@@ -1,5 +1,5 @@
 import pytest
-from src.delivery import calculateDeliveryFee, applyPromoCode, calculateSurge
+from src.delivery import calculateDeliveryFee, applyPromoCode, calculateSurge, calculateOrderTotal
 
 # --- Happy paths ---
 
@@ -305,3 +305,127 @@ def test_should_return_normal_rate_when_hour_is_exactly_10h():
     result = calculateSurge(10.0, 1)
     # Assert
     assert result == 1.0
+
+
+# ─── calculateOrderTotal ───────────────────────────────────────────────────────
+# Constantes partagées
+PROMO_CODES_ORDER = [
+    {"code": "BIENVENUE20", "type": "percentage", "value": 20, "minOrder": 15.00, "expiresAt": "2026-12-31"},
+    {"code": "FIXED5",      "type": "fixed",      "value": 5,  "minOrder": 10.00, "expiresAt": "2026-12-31"},
+]
+PIZZAS = [{"name": "Pizza", "price": 12.50, "quantity": 2}]  # subtotal = 25.00
+
+# --- Scénarios complets ---
+
+def test_should_return_correct_totals_for_standard_order():
+    # Arrange
+    # subtotal = 25.00, fee = 2.00 + (5-3)*0.50 = 3.00, surge = 1.0 (mardi 15h)
+    # total = 25.00 + 3.00 * 1.0 = 28.00, discount = 0
+    expected = {"subtotal": 25.00, "discount": 0.00, "deliveryFee": 3.00, "surge": 1.0, "total": 28.00}
+    # Act
+    result = calculateOrderTotal(PIZZAS, distance=5, weight=1, promoCode=None,
+                                  hour=15.0, dayOfWeek=1, promoCodes=PROMO_CODES_ORDER)
+    # Assert
+    assert result == expected
+
+def test_should_apply_promo_code_on_subtotal_only():
+    # Arrange
+    # subtotal = 25.00, discount = 25*0.20 = 5.00, subtotal_after = 20.00
+    # fee = 3.00, surge = 1.0
+    # total = 20.00 + 3.00 = 23.00
+    expected = {"subtotal": 25.00, "discount": 5.00, "deliveryFee": 3.00, "surge": 1.0, "total": 23.00}
+    # Act
+    result = calculateOrderTotal(PIZZAS, distance=5, weight=1, promoCode="BIENVENUE20",
+                                  hour=15.0, dayOfWeek=1, promoCodes=PROMO_CODES_ORDER)
+    # Assert
+    assert result == expected
+
+def test_should_apply_surge_on_delivery_fee_only():
+    # Arrange
+    # subtotal = 25.00, discount = 0, fee = 3.00, surge = 1.8 (vendredi 20h)
+    # total = 25.00 + 3.00 * 1.8 = 25.00 + 5.40 = 30.40
+    expected = {"subtotal": 25.00, "discount": 0.00, "deliveryFee": 5.40, "surge": 1.8, "total": 30.40}
+    # Act
+    result = calculateOrderTotal(PIZZAS, distance=5, weight=1, promoCode=None,
+                                  hour=20.0, dayOfWeek=4, promoCodes=PROMO_CODES_ORDER)
+    # Assert
+    assert result == expected
+
+def test_should_combine_promo_and_surge():
+    # Arrange
+    # subtotal = 25.00, discount = 5.00, subtotal_after = 20.00
+    # fee = 3.00 * 1.8 = 5.40, total = 20.00 + 5.40 = 25.40
+    expected = {"subtotal": 25.00, "discount": 5.00, "deliveryFee": 5.40, "surge": 1.8, "total": 25.40}
+    # Act
+    result = calculateOrderTotal(PIZZAS, distance=5, weight=1, promoCode="BIENVENUE20",
+                                  hour=20.0, dayOfWeek=4, promoCodes=PROMO_CODES_ORDER)
+    # Assert
+    assert result == expected
+
+def test_should_return_zero_discount_when_no_promo_code():
+    # Act
+    result = calculateOrderTotal(PIZZAS, distance=2, weight=1, promoCode=None,
+                                  hour=15.0, dayOfWeek=1, promoCodes=PROMO_CODES_ORDER)
+    # Assert
+    assert result["discount"] == 0.00
+
+# --- Cas qui cassent ---
+
+def test_should_raise_error_when_items_list_is_empty():
+    # Act & Assert
+    with pytest.raises(ValueError):
+        calculateOrderTotal([], distance=5, weight=1, promoCode=None,
+                            hour=15.0, dayOfWeek=1, promoCodes=PROMO_CODES_ORDER)
+
+def test_should_raise_error_when_item_has_negative_price():
+    # Arrange
+    items = [{"name": "Burger", "price": -5.00, "quantity": 1}]
+    # Act & Assert
+    with pytest.raises(ValueError):
+        calculateOrderTotal(items, distance=5, weight=1, promoCode=None,
+                            hour=15.0, dayOfWeek=1, promoCodes=PROMO_CODES_ORDER)
+
+def test_should_raise_error_when_closed_hour():
+    # Arrange - 23h → fermé (surge = 0)
+    # Act & Assert
+    with pytest.raises(ValueError):
+        calculateOrderTotal(PIZZAS, distance=5, weight=1, promoCode=None,
+                            hour=23.0, dayOfWeek=1, promoCodes=PROMO_CODES_ORDER)
+
+def test_should_raise_error_when_distance_out_of_zone():
+    # Arrange - 15 km > 10 km → hors zone
+    # Act & Assert
+    with pytest.raises(ValueError):
+        calculateOrderTotal(PIZZAS, distance=15, weight=1, promoCode=None,
+                            hour=15.0, dayOfWeek=1, promoCodes=PROMO_CODES_ORDER)
+
+def test_should_ignore_item_with_zero_quantity():
+    # Arrange - quantity=0 ignorée, seule la pizza compte
+    items = [
+        {"name": "Pizza", "price": 12.50, "quantity": 2},
+        {"name": "Boisson", "price": 3.00, "quantity": 0},
+    ]
+    # Act
+    result = calculateOrderTotal(items, distance=5, weight=1, promoCode=None,
+                                  hour=15.0, dayOfWeek=1, promoCodes=PROMO_CODES_ORDER)
+    # Assert - subtotal identique à PIZZAS seul
+    assert result["subtotal"] == 25.00
+
+# --- Vérification de la structure de retour ---
+
+def test_should_return_dict_with_all_expected_keys():
+    # Act
+    result = calculateOrderTotal(PIZZAS, distance=2, weight=1, promoCode=None,
+                                  hour=15.0, dayOfWeek=1, promoCodes=PROMO_CODES_ORDER)
+    # Assert
+    assert set(result.keys()) == {"subtotal", "discount", "deliveryFee", "surge", "total"}
+
+def test_should_return_amounts_rounded_to_two_decimals():
+    # Arrange - 3 items à 3.333... pour forcer des arrondis
+    items = [{"name": "Item", "price": 3.333, "quantity": 3}]  # subtotal = 9.999 → 10.00
+    # Act
+    result = calculateOrderTotal(items, distance=2, weight=1, promoCode=None,
+                                  hour=15.0, dayOfWeek=1, promoCodes=PROMO_CODES_ORDER)
+    # Assert
+    assert result["subtotal"] == round(result["subtotal"], 2)
+    assert result["total"] == round(result["total"], 2)
