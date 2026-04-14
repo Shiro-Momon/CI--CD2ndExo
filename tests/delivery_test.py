@@ -1,4 +1,5 @@
 import pytest
+from datetime import date
 from src.delivery import calculateDeliveryFee, applyPromoCode, calculateSurge, calculateOrderTotal
 
 # --- Happy paths ---
@@ -100,7 +101,7 @@ PROMO_CODES = [
     {"code": "HIGHMIN",     "type": "fixed",      "value": 3,  "minOrder": 100.00,"expiresAt": "2026-12-31"},
     {"code": "FULL100",     "type": "percentage", "value": 100,"minOrder": 0.00,  "expiresAt": "2026-12-31"},
     {"code": "BIGFIXED",    "type": "fixed",      "value": 10, "minOrder": 0.00,  "expiresAt": "2026-12-31"},
-    {"code": "TODAY",       "type": "fixed",      "value": 1,  "minOrder": 0.00,  "expiresAt": "2026-04-13"},
+    {"code": "TODAY",       "type": "fixed",      "value": 1,  "minOrder": 0.00,  "expiresAt": date.today().isoformat()},
 ]
 
 # --- Cas normaux ---
